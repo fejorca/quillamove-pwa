@@ -24,28 +24,42 @@ if ('serviceWorker' in navigator) {
 const allow = consent.querySelector('button')!;
 
 allow.addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    setStatus('Este navegador no entrega la ubicación.');
+    return;
+  }
+  if (!window.isSecureContext) {
+    setStatus('La ubicación solo se pide por HTTPS.');
+    return;
+  }
   allow.disabled = true;
-  // El pedido de ubicación tiene que salir en el mismo instante del toque. En
-  // Safari de iOS, llamarlo después de un await se descarta en silencio y el
-  // permiso nunca aparece.
-  locate(
+  setStatus('Pidiendo permiso de ubicación…');
+  // La llamada tiene que estar escrita aquí, dentro del toque, sin pasar por
+  // otra función. Safari de iOS solo muestra el permiso si getCurrentPosition
+  // se invoca de forma síncrona en el manejador del gesto; si llega a través de
+  // un await o de una indirección, lo descarta en silencio.
+  navigator.geolocation.getCurrentPosition(
     (position) => {
       consent.hidden = true;
       void start(position);
     },
     denied,
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
   );
 });
 
 /** El permiso no llegó: el botón vuelve a quedar listo y se explica por qué. */
 function denied(error: GeolocationPositionError): void {
   allow.disabled = false;
-  const off = error.code === error.POSITION_UNAVAILABLE;
-  setStatus(
-    off
-      ? 'La ubicación del teléfono está apagada. Actívala en Ajustes y vuelve a intentar.'
-      : 'Sin permiso de ubicación. En Safari: aA → Configuración del sitio → Ubicación → Permitir.',
-  );
+  const reason =
+    error.code === error.PERMISSION_DENIED
+      ? 'permiso denegado'
+      : error.code === error.POSITION_UNAVAILABLE
+        ? 'ubicación apagada'
+        : error.code === error.TIMEOUT
+          ? 'el teléfono no respondió a tiempo'
+          : `error ${error.code}`;
+  setStatus(`No se obtuvo la ubicación (${reason}). En Safari: aA → Configuración del sitio → Ubicación → Permitir.`);
 }
 
 /** Abre la sesión del dispositivo y empieza a reportar desde la posición ya obtenida. */
@@ -140,25 +154,14 @@ async function loadConfig(): Promise<Record<string, unknown> | null> {
   }
 }
 
-/**
- * Pide la posición. Con callbacks el pedido sale en el acto, que es lo que iOS
- * exige para mostrar el permiso; sin ellos devuelve una promesa para los
- * reportes siguientes, que ya no necesitan gesto.
- */
-function locate(onFix: (position: GeolocationPosition) => void, onError: (error: GeolocationPositionError) => void): void;
-function locate(): Promise<GeolocationPosition>;
-function locate(
-  onFix?: (position: GeolocationPosition) => void,
-  onError?: (error: GeolocationPositionError) => void,
-): Promise<GeolocationPosition> | void {
-  const ok = onFix ?? (() => undefined);
-  const fail = onError ?? (() => undefined);
-  if (onFix) {
-    navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-    return;
-  }
+/** Pide la posición para los reportes siguientes, cuando el permiso ya está dado. */
+function locate(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
   });
 }
 
