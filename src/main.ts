@@ -25,24 +25,27 @@ const allow = consent.querySelector('button')!;
 
 allow.addEventListener('click', () => {
   allow.disabled = true;
-  void requestLocation();
+  // El pedido de ubicación tiene que salir en el mismo instante del toque. En
+  // Safari de iOS, llamarlo después de un await se descarta en silencio y el
+  // permiso nunca aparece.
+  locate(
+    (position) => {
+      consent.hidden = true;
+      void start(position);
+    },
+    denied,
+  );
 });
 
-/**
- * El toque del botón dispara el pedido de permiso del navegador. Si se concede,
- * arranca el reporte; si se niega, el panel vuelve a verse con la explicación.
- */
-async function requestLocation(): Promise<void> {
-  let position: GeolocationPosition;
-  try {
-    position = await locate();
-  } catch {
-    allow.disabled = false;
-    setStatus('Sin permiso de ubicación. Actívalo en el navegador para reportar.');
-    return;
-  }
-  consent.hidden = true;
-  void start(position);
+/** El permiso no llegó: el botón vuelve a quedar listo y se explica por qué. */
+function denied(error: GeolocationPositionError): void {
+  allow.disabled = false;
+  const off = error.code === error.POSITION_UNAVAILABLE;
+  setStatus(
+    off
+      ? 'La ubicación del teléfono está apagada. Actívala en Ajustes y vuelve a intentar.'
+      : 'Sin permiso de ubicación. En Safari: aA → Configuración del sitio → Ubicación → Permitir.',
+  );
 }
 
 /** Abre la sesión del dispositivo y empieza a reportar desde la posición ya obtenida. */
@@ -137,9 +140,25 @@ async function loadConfig(): Promise<Record<string, unknown> | null> {
   }
 }
 
-function locate(): Promise<GeolocationPosition> {
+/**
+ * Pide la posición. Con callbacks el pedido sale en el acto, que es lo que iOS
+ * exige para mostrar el permiso; sin ellos devuelve una promesa para los
+ * reportes siguientes, que ya no necesitan gesto.
+ */
+function locate(onFix: (position: GeolocationPosition) => void, onError: (error: GeolocationPositionError) => void): void;
+function locate(): Promise<GeolocationPosition>;
+function locate(
+  onFix?: (position: GeolocationPosition) => void,
+  onError?: (error: GeolocationPositionError) => void,
+): Promise<GeolocationPosition> | void {
+  const ok = onFix ?? (() => undefined);
+  const fail = onError ?? (() => undefined);
+  if (onFix) {
+    navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    return;
+  }
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 });
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   });
 }
 
