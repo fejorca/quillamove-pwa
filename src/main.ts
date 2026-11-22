@@ -23,7 +23,17 @@ if ('serviceWorker' in navigator) {
 
 const allow = consent.querySelector('button')!;
 
+const standalone =
+  window.matchMedia('(display-mode: standalone)').matches ||
+  (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+if (standalone) {
+  allow.disabled = true;
+  setStatus('Ábrela en Safari, no desde el ícono: iOS no pide la ubicación en la app de inicio.');
+}
+
 allow.addEventListener('click', () => {
+  if (standalone) return;
   if (!navigator.geolocation) {
     setStatus('Este navegador no entrega la ubicación.');
     return;
