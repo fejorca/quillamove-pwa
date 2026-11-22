@@ -21,24 +21,35 @@ if ('serviceWorker' in navigator) {
   void navigator.serviceWorker.register('sw.js');
 }
 
-consent.querySelector('button')!.addEventListener('click', () => {
-  consent.hidden = true;
-  void start();
+const allow = consent.querySelector('button')!;
+
+allow.addEventListener('click', () => {
+  allow.disabled = true;
+  void requestLocation();
 });
 
-/** Pide permiso, abre la sesión del dispositivo y empieza a reportar. */
-async function start(): Promise<void> {
-  const config = probeConfig(await loadConfig());
-  if (!config.enabled) {
-    setStatus('El reporte de ubicación está apagado.');
-    return;
-  }
-
+/**
+ * El toque del botón dispara el pedido de permiso del navegador. Si se concede,
+ * arranca el reporte; si se niega, el panel vuelve a verse con la explicación.
+ */
+async function requestLocation(): Promise<void> {
   let position: GeolocationPosition;
   try {
     position = await locate();
   } catch {
-    setStatus('Sin permiso de ubicación. El mapa sigue disponible, pero no se envía nada.');
+    allow.disabled = false;
+    setStatus('Sin permiso de ubicación. Actívalo en el navegador para reportar.');
+    return;
+  }
+  consent.hidden = true;
+  void start(position);
+}
+
+/** Abre la sesión del dispositivo y empieza a reportar desde la posición ya obtenida. */
+async function start(position: GeolocationPosition): Promise<void> {
+  const config = probeConfig(await loadConfig());
+  if (!config.enabled) {
+    setStatus('El reporte de ubicación está apagado.');
     return;
   }
 

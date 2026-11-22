@@ -41,9 +41,13 @@ header p {
   flex: 1;
 }
 
+/* Leaflet pinta sus mosaicos en capas con z-index alto (hasta 1000), así que
+   este panel tiene que quedar por encima o el mapa lo tapa. */
 #consent {
   position: fixed;
+  z-index: 1100;
   inset: auto 1rem 1rem;
+  max-width: 28rem;
   padding: 1rem;
   border-radius: 12px;
   background: #fff;
